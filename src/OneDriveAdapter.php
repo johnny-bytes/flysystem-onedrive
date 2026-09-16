@@ -259,9 +259,7 @@ class OneDriveAdapter extends OneDriveUtilityAdapter implements FilesystemAdapte
                 throw new UnableToReadFile('Unable to read file at '.$path);
             }
 
-            $object['contents'] = stream_get_contents($stream);
-
-            return $object['contents'];
+            return stream_get_contents($stream);
         } catch (Exception $e) {
             throw new Exception($e);
         }
