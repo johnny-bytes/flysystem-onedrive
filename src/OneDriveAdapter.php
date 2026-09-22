@@ -431,6 +431,19 @@ class OneDriveAdapter extends OneDriveUtilityAdapter implements FilesystemAdapte
     /**
      * @throws Exception|GuzzleException
      */
+    /**
+     * The only DriveItem fields the adapter maps. Without $select Graph returns the full
+     * resource -- thumbnails, permissions, shared, cTag and the rest -- for every child.
+     *
+     * @see https://learn.microsoft.com/en-us/graph/api/driveitem-list-children
+     */
+    private const LISTING_SELECT = 'name,size,lastModifiedDateTime,file,folder,parentReference';
+
+    /**
+     * Children page at 200 by default; the SDK refuses anything above 999.
+     */
+    private const LISTING_PAGE_SIZE = 999;
+
     public function listContents(string $path, bool $deep = true): iterable
     {
         try {
@@ -439,8 +452,9 @@ class OneDriveAdapter extends OneDriveUtilityAdapter implements FilesystemAdapte
             /** @var DriveItem[] $items */
             $items = [];
             $request = $this->graph
-                ->createCollectionRequest('GET', $path)
-                ->setReturnType(DriveItem::class);
+                ->createCollectionRequest('GET', $this->withListingQuery($path))
+                ->setReturnType(DriveItem::class)
+                ->setPageSize(self::LISTING_PAGE_SIZE);
             while (! $request->isEnd()) {
                 $items = array_merge($items, $request->getPage());
             }
@@ -476,7 +490,7 @@ class OneDriveAdapter extends OneDriveUtilityAdapter implements FilesystemAdapte
             return $class::fromArray([
                 StorageAttributes::ATTRIBUTE_TYPE => $item->getFile() ? StorageAttributes::TYPE_FILE : StorageAttributes::TYPE_DIRECTORY,
                 StorageAttributes::ATTRIBUTE_PATH => $driveLessPath,
-                StorageAttributes::ATTRIBUTE_LAST_MODIFIED => $item->getLastModifiedDateTime()->getTimestamp(),
+                StorageAttributes::ATTRIBUTE_LAST_MODIFIED => $item->getLastModifiedDateTime()?->getTimestamp(),
                 StorageAttributes::ATTRIBUTE_FILE_SIZE => $item->getSize(),
                 StorageAttributes::ATTRIBUTE_MIME_TYPE => $item->getFile()
                     ? $item->getFile()->getMimeType()
@@ -490,12 +504,18 @@ class OneDriveAdapter extends OneDriveUtilityAdapter implements FilesystemAdapte
      * @throws GuzzleException
      * @throws GraphException
      */
+    private function withListingQuery(string $endpoint): string
+    {
+        return $endpoint.(str_contains($endpoint, '?') ? '&' : '?').'$select='.self::LISTING_SELECT;
+    }
+
     private function getChildren($directory): array
     {
         $path = $directory.':/children';
         $request = $this->graph
-            ->createCollectionRequest('GET', $path)
-            ->setReturnType(DriveItem::class);
+            ->createCollectionRequest('GET', $this->withListingQuery($path))
+            ->setReturnType(DriveItem::class)
+            ->setPageSize(self::LISTING_PAGE_SIZE);
         /** @var DriveItem[] $items */
         $items = [];
         while (! $request->isEnd()) {
