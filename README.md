@@ -2,7 +2,7 @@
 
 # Flysystem adapter for Microsoft OneDrive
 This package contains a Flysystem OneDrive adapter, which makes use of the Microsoft Graph API.
-The adapter is ready for the latest Laravel 12.x version.
+Version 1.0.0 requires PHP 8.3+ and Laravel 13.x. It uses Flysystem 3 and Microsoft Graph SDK 1.x and can be used with Filament 5 applications.
 
 You can use this package to access files stored in onedrive or sharepoint folders from your PHP or Laravel web applications.
 
@@ -17,7 +17,7 @@ You can use this package to access files stored in onedrive or sharepoint folder
 Simply install the package using composer:
 
 ```bash
-composer require justus/flysystem-onedrive
+composer require justus/flysystem-onedrive:^1.0
 ```
 
 ## 2. Usage
@@ -50,15 +50,9 @@ ONEDRIVE_DIR_TYPE=groups
 ],
 ```
 
-3. Add the ``OneDriveAdapterServiceProvider`` in ``config/app.php``
+3. Laravel automatically discovers the service provider. If package discovery is disabled, register `Justus\FlysystemOneDrive\Providers\OneDriveAdapterServiceProvider::class` in `bootstrap/providers.php`.
 
-```php
-'providers' => [
-    // ...
-    Justus\FlysystemOneDrive\Providers\OneDriveAdapterServiceProvider::class,
-    // ...
-],
-```
+For client-credentials authentication, set `tenant_id`, `client_id`, and `secret` on the disk configuration. An explicit `access_token` takes precedence; otherwise OAuth tokens are cached per set of credentials.
 
 There are two established approaches of using the package
 - On demand: Recommended if you use a dynamic graph access token. (usage e. g. session('graph_access_token'))

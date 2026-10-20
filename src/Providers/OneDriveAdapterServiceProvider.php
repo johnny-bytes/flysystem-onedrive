@@ -8,8 +8,8 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Justus\FlysystemOneDrive\OneDriveAdapter;
+use Justus\FlysystemOneDrive\RefreshingGraph;
 use League\Flysystem\Filesystem;
-use Microsoft\Graph\Graph;
 use RuntimeException;
 
 class OneDriveAdapterServiceProvider extends ServiceProvider
@@ -36,12 +36,29 @@ class OneDriveAdapterServiceProvider extends ServiceProvider
                 'directory_type' => $config['directory_type'],
             ];
 
-            $graph = new Graph;
+            $graph = new RefreshingGraph(fn (): string => OneDriveAdapterServiceProvider::resolveToken($config));
+            $adapter = new OneDriveAdapter($graph, $config['root'], $options);
 
+            return new FilesystemAdapter(
+                new Filesystem($adapter, $config),
+                $adapter,
+                $config
+            );
+        });
+    }
+
+    /**
+     * @param  array<string, mixed>  $config
+     */
+    public static function resolveToken(array $config): string
+    {
+        $accessToken = $config['access_token'] ?? null;
+
+        if (! is_string($accessToken) || $accessToken === '') {
             // 1. Read config. Do not cast directly; first ensure it's actually a string.
-            $tenantId = config('filesystems.disks.onedrive.tenant_id');
-            $clientId = config('filesystems.disks.onedrive.client_id');
-            $clientSecret = config('filesystems.disks.onedrive.secret');
+            $tenantId = $config['tenant_id'] ?? config('filesystems.disks.onedrive.tenant_id');
+            $clientId = $config['client_id'] ?? config('filesystems.disks.onedrive.client_id');
+            $clientSecret = $config['secret'] ?? config('filesystems.disks.onedrive.secret');
 
             if (
                 ! is_string($tenantId) ||
@@ -53,17 +70,17 @@ class OneDriveAdapterServiceProvider extends ServiceProvider
                         'Check tenant_id, client_id, and secret in config/filesystems.php.'
                 );
             }
-            $cacheKey = 'onedrive_cache';
+            $cacheKey = 'onedrive_token_'.hash('sha256', $tenantId.'|'.$clientId.'|'.$clientSecret);
             $cachedToken = Cache::get($cacheKey);
             if ($cachedToken && isset($cachedToken['token'], $cachedToken['expires_at'])) {
-                // If it's not expired yet, just use it
-                if (time() < $cachedToken['expires_at']) {
+                // Leave a minute so a request does not set off with a token about to expire
+                if (time() < $cachedToken['expires_at'] - 60) {
                     $accessToken = $cachedToken['token'];
                 }
             }
 
             // If $accessToken is still not set, we need to request a new one
-            if (! isset($accessToken)) {
+            if (! is_string($accessToken) || $accessToken === '') {
                 $oauthUrl = "https://login.microsoftonline.com/{$tenantId}/oauth2/v2.0/token";
 
                 $response = Http::acceptJson()->asForm()->post($oauthUrl, [
@@ -90,14 +107,8 @@ class OneDriveAdapterServiceProvider extends ServiceProvider
                 ], $expiresIn);
             }
 
-            $graph->setAccessToken($accessToken);
-            $adapter = new OneDriveAdapter($graph, $config['root'], $options);
+        }
 
-            return new FilesystemAdapter(
-                new Filesystem($adapter, $config),
-                $adapter,
-                $config
-            );
-        });
+        return $accessToken;
     }
 }

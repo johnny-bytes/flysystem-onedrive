@@ -1,0 +1,6 @@
+# 1.0.0
+
+- Require PHP 8.3+ and Laravel 13; retain Flysystem 3 and Microsoft Graph SDK 1.x.
+- Automatically discover the Laravel service provider.
+- Honor explicit access tokens and disk-specific OAuth credentials; isolate cached tokens by credentials.
+- Update Testbench/PHPUnit and test disk creation and authentication without live credentials.
