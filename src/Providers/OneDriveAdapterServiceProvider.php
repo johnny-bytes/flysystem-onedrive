@@ -2,15 +2,14 @@
 
 namespace Justus\FlysystemOneDrive\Providers;
 
-use Closure;
 use Illuminate\Filesystem\FilesystemAdapter;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\ServiceProvider;
 use Justus\FlysystemOneDrive\OneDriveAdapter;
+use Justus\FlysystemOneDrive\RefreshingGraph;
 use League\Flysystem\Filesystem;
-use Microsoft\Graph\Graph;
 use RuntimeException;
 
 class OneDriveAdapterServiceProvider extends ServiceProvider
@@ -37,33 +36,7 @@ class OneDriveAdapterServiceProvider extends ServiceProvider
                 'directory_type' => $config['directory_type'],
             ];
 
-            $resolveAccessToken = fn (): string => OneDriveAdapterServiceProvider::resolveToken($config);
-
-            // A queue worker keeps this disk for hours, past the token's lifetime,
-            // so every request asks for the (cached) current token instead.
-            $graph = new class($resolveAccessToken) extends Graph
-            {
-                public function __construct(private readonly Closure $resolveAccessToken)
-                {
-                    parent::__construct();
-                }
-
-                public function createRequest($requestType, $endpoint)
-                {
-                    $this->setAccessToken(($this->resolveAccessToken)());
-
-                    return parent::createRequest($requestType, $endpoint);
-                }
-
-                public function createCollectionRequest($requestType, $endpoint)
-                {
-                    $this->setAccessToken(($this->resolveAccessToken)());
-
-                    return parent::createCollectionRequest($requestType, $endpoint);
-                }
-            };
-
-            $graph->setAccessToken($resolveAccessToken());
+            $graph = new RefreshingGraph(fn (): string => OneDriveAdapterServiceProvider::resolveToken($config));
             $adapter = new OneDriveAdapter($graph, $config['root'], $options);
 
             return new FilesystemAdapter(
